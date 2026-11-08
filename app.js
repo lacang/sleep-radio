@@ -115,7 +115,7 @@ function paintDeck(){
     el.nowName.classList.remove('idle');
     el.nowSub.textContent  = st.sub || st.groupName;
     if(playing){
-      el.statusText.textContent = st.noise ? '生成中' : '正在播放';
+      el.statusText.textContent = '正在播放';
       el.liveDot.classList.add('on');
     }else{
       el.statusText.textContent = '已暂停';
