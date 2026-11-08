@@ -1,14 +1,19 @@
 /* 睡前收音机 · 单文件播放内核
  * 电台：mp3 直流，原生 <audio>，无 hls.js、无 CORS 依赖
  * 白噪音：Web Audio 本地合成，永不失效
+ * 音量：不做应用内调节，一律走系统音量；这里只保留渐弱用的 fadeMul
  */
 (() => {
 'use strict';
 
-const STORE_KEY   = 'sleepradio.v1';
+const STORE_KEY    = 'sleepradio.v1';
 const FADE_SECONDS = 60;          // 最后 60 秒渐弱
 const RECONNECT_MS = 3000;
 const TIMER_OPTS   = [0, 15, 30, 45, 60, 90, 120];
+
+/* 白噪音的合成电平。电台直接满幅（由系统音量决定），
+ * 白噪音是程序生成的宽频噪声，满幅会明显偏吵，所以压到 0.7。 */
+const NOISE_LEVEL  = 0.7;
 
 /* ---------------- 状态 ---------------- */
 let groups = [];
@@ -17,7 +22,6 @@ let byId   = {};
 
 let currentId = null;
 let playing   = false;
-let baseVolume = 0.7;
 let fadeMul    = 1;
 let sleepAt    = 0;               // 目标停止时间戳；0 = 未设定
 let sleepMin   = 0;
@@ -35,7 +39,7 @@ const el = {
   list: $('#list'), nowName: $('#nowName'), nowSub: $('#nowSub'),
   statusText: $('#statusText'), liveDot: $('#liveDot'),
   btnPlay: $('#btnPlay'), icoPlay: $('#icoPlay'), icoPause: $('#icoPause'),
-  volume: $('#volume'), btnTimer: $('#btnTimer'), timerLabel: $('#timerLabel'),
+  btnTimer: $('#btnTimer'), timerLabel: $('#timerLabel'),
   fadeHint: $('#fadeHint'), sheet: $('#sheet'), sheetOpts: $('#sheetOpts'),
   sheetCancel: $('#sheetCancel'),
 };
@@ -47,9 +51,7 @@ function loadStore(){
 }
 function saveStore(){
   try{
-    localStorage.setItem(STORE_KEY, JSON.stringify({
-      currentId, volume: baseVolume, sleepMin
-    }));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ currentId, sleepMin }));
   }catch(e){}
 }
 
@@ -131,23 +133,25 @@ function paintDeck(){
 }
 
 /* ==================================================================
-   音量
+   电平：只由渐弱系数决定，不做应用内音量
    ================================================================== */
 function applyVolume(){
-  const v = Math.max(0, Math.min(1, baseVolume * fadeMul));
+  const v = Math.max(0, Math.min(1, fadeMul));
   if(audio) audio.volume = v;
-  if(noiseGain && actx) noiseGain.gain.setTargetAtTime(v, actx.currentTime, 0.06);
+  if(noiseGain && actx) noiseGain.gain.setTargetAtTime(NOISE_LEVEL * v, actx.currentTime, 0.06);
 }
 
 /* ==================================================================
    电台播放
    ================================================================== */
+let isSwitching = false;
+
 function ensureAudio(){
   if(audio) return audio;
   audio = new Audio();
   audio.preload = 'none';
   audio.setAttribute('playsinline', '');
-  audio.crossOrigin = null;
+  audio.volume = 1;
   audio.addEventListener('playing', () => {
     playing = true; lastProgressAt = Date.now(); lastCurrentTime = 0;
     paintDeck();
@@ -169,8 +173,6 @@ function ensureAudio(){
   });
   return audio;
 }
-
-let isSwitching = false;
 
 function playStation(st){
   const a = ensureAudio();
@@ -289,10 +291,10 @@ function playNoise(st){
   const chain = [src];
 
   if(kind === 'rain'){
+    const hp = actx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 420; hp.Q.value = 0.7;
     const lp = actx.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 0.5;
-    const hp = actx.createBiquadFilter();
-    hp.type = 'highpass'; hp.frequency.value = 420;
     chain.push(hp, lp);
   }else if(kind === 'fan'){
     const lp = actx.createBiquadFilter();
@@ -308,21 +310,26 @@ function playNoise(st){
     chain.push(hp);
   }
 
-  // 串联
-  for(let i = 0; i < chain.length - 1; i++) chain[i].connect(chain[i+1]);
-  chain[chain.length - 1].connect(noiseGain);
-
-  // 雨势/风扇的缓慢起伏
+  // 雨势 / 风扇的缓慢起伏。
+  // 关键：LFO 必须接在独立的 mod 节点上，不能直接接 noiseGain.gain。
+  // 直连 gain 参数时，LFO 会一直叠加在音量上，暂停时把 gain 设成 0
+  // 仍然会被 LFO 顶起来 —— 这就是「白噪音打开后关不掉」的根因。
   if(kind === 'rain' || kind === 'fan'){
+    const mod = actx.createGain();
+    mod.gain.value = 1;
     const lfo = actx.createOscillator();
     const lfoGain = actx.createGain();
     lfo.frequency.value = kind === 'rain' ? 0.07 : 0.045;
-    lfoGain.gain.value = kind === 'rain' ? 0.055 : 0.03;
+    lfoGain.gain.value = kind === 'rain' ? 0.08 : 0.045;
     lfo.connect(lfoGain);
-    lfoGain.connect(noiseGain.gain);
+    lfoGain.connect(mod.gain);
     lfo.start();
-    noiseChain.push(lfo);
+    chain.push(mod);
+    noiseChain.push(lfo, lfoGain);
   }
+
+  for(let i = 0; i < chain.length - 1; i++) chain[i].connect(chain[i+1]);
+  chain[chain.length - 1].connect(noiseGain);
 
   src.start();
   noiseSrc = src;
@@ -330,7 +337,7 @@ function playNoise(st){
 
   noiseGain.gain.cancelScheduledValues(actx.currentTime);
   noiseGain.gain.setValueAtTime(0, actx.currentTime);
-  noiseGain.gain.setTargetAtTime(Math.max(0.001, baseVolume * fadeMul), actx.currentTime, 0.25);
+  noiseGain.gain.setTargetAtTime(NOISE_LEVEL * Math.max(0.001, fadeMul), actx.currentTime, 0.25);
 
   playing = true;
   paintDeck();
@@ -342,9 +349,16 @@ function stopNoise(){
     try{ noiseSrc.disconnect(); }catch(e){}
     noiseSrc = null;
   }
-  noiseChain.forEach(n => { try{ n.disconnect(); }catch(e){} });
+  noiseChain.forEach(n => {
+    try{ if(typeof n.stop === 'function') n.stop(); }catch(e){}
+    try{ n.disconnect(); }catch(e){}
+  });
   noiseChain = [];
-  if(noiseGain && actx) noiseGain.gain.setValueAtTime(0, actx.currentTime);
+  if(noiseGain && actx){
+    // 清掉之前 setTargetAtTime 留下的自动化曲线，再落到 0
+    noiseGain.gain.cancelScheduledValues(actx.currentTime);
+    noiseGain.gain.setValueAtTime(0, actx.currentTime);
+  }
 }
 
 /* ==================================================================
@@ -354,7 +368,7 @@ function onPick(sid){
   const st = byId[sid];
   if(!st) return;
 
-  // 点当前正在播的台 → 暂停
+  // 点当前正在播的项 → 暂停
   if(sid === currentId && playing){ pause(); return; }
 
   currentId = sid;
@@ -386,7 +400,9 @@ function play(){
 
 function pause(){
   if(audio) audio.pause();
-  if(actx && noiseGain) noiseGain.gain.setTargetAtTime(0, actx.currentTime, 0.08);
+  // 白噪音必须真停，不能只把 gain 降到 0：
+  // 滤波器 / LFO 还在跑，只降音量会关不干净，重播也会叠一层。
+  if(noiseSrc) stopNoise();
   playing = false;
   paintDeck();
 }
@@ -529,8 +545,6 @@ async function boot(){
 
   // 恢复上次状态
   const s = loadStore();
-  if(typeof s.volume === 'number'){ baseVolume = s.volume; }
-  el.volume.value = Math.round(baseVolume * 100);
   if(s.currentId && byId[s.currentId]) currentId = s.currentId;
   if(typeof s.sleepMin === 'number' && s.sleepMin > 0){
     sleepMin = s.sleepMin;
@@ -544,13 +558,6 @@ async function boot(){
 
   // 事件
   el.btnPlay.addEventListener('click', toggle);
-
-  el.volume.addEventListener('input', e => {
-    baseVolume = Number(e.target.value) / 100;
-    fadeMul = 1;
-    applyVolume();
-    saveStore();
-  });
 
   el.btnTimer.addEventListener('click', openSheet);
   el.sheetCancel.addEventListener('click', closeSheet);
@@ -584,10 +591,11 @@ window.__dbg = () => ({
   audioPaused: audio ? audio.paused : null,
   audioTime: audio ? Number(audio.currentTime.toFixed(2)) : null,
   audioReady: audio ? audio.readyState : null,
+  audioVolume: audio ? Number(audio.volume.toFixed(2)) : null,
   hasNoise: !!noiseSrc,
   ctxState: actx ? actx.state : null,
-  gain: (noiseGain && actx) ? Number(noiseGain.gain.value.toFixed(3)) : null,
-  volume: Number(baseVolume.toFixed(2)),
+  gain: (noiseGain && actx) ? Number(noiseGain.gain.value.toFixed(4)) : null,
+  noiseLevel: NOISE_LEVEL,
   fadeMul: Number(fadeMul.toFixed(2)),
   sleepLeft: sleepAt ? Math.round((sleepAt - Date.now())/1000) : 0,
   activeItems: document.querySelectorAll('.item.active').length,
