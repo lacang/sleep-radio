@@ -1,133 +1,268 @@
 {
-  "groups": [
+ "groups": [
+  {
+   "id": "news",
+   "name": "新闻·财经",
+   "stations": [
     {
-      "id": "news",
-      "name": "新闻 · 财经",
-      "stations": [
-        {
-          "name": "中国之声",
-          "sub": "CNR-1",
-          "url": "https://lhttp.qtfm.cn/live/15318317/64k.mp3"
-        },
-        {
-          "name": "经济之声",
-          "sub": "CNR-2",
-          "url": "https://lhttp.qingting.fm/live/4915/64k.mp3"
-        },
-        {
-          "name": "北京新闻广播",
-          "sub": "FM100.6",
-          "url": "https://lhttp.qtfm.cn/live/339/64k.mp3"
-        },
-        {
-          "name": "广东新闻广播",
-          "sub": "FM91.4",
-          "url": "https://lhttp.qtfm.cn/live/1254/64k.mp3"
-        },
-        {
-          "name": "珠江经济台",
-          "sub": "财经",
-          "url": "https://lhttp.qtfm.cn/live/1259/64k.mp3"
-        }
-      ]
+     "name": "中国之声",
+     "sub": "CNR · 新闻",
+     "url": "https://lhttp.qtfm.cn/live/15318317/64k.mp3"
     },
     {
-      "id": "classical",
-      "name": "轻音乐 · 古典",
-      "stations": [
-        {
-          "name": "上海经典音乐 94.7",
-          "sub": "经典音乐台",
-          "url": "https://lhttp-hw.qtfm.cn/live/267/64k.mp3"
-        },
-        {
-          "name": "上海经典金曲 103.7",
-          "sub": "老歌金曲",
-          "url": "https://lhttp-hw.qtfm.cn/live/273/64k.mp3"
-        },
-        {
-          "name": "50首经典古典音乐",
-          "sub": "纯古典歌单",
-          "url": "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3"
-        },
-        {
-          "name": "北京音乐广播",
-          "sub": "FM97.4",
-          "url": "https://lhttp.qtfm.cn/live/332/64k.mp3"
-        },
-        {
-          "name": "江苏经典流行音乐",
-          "sub": "怀旧流行",
-          "url": "https://lhttp.qtfm.cn/live/4938/64k.mp3"
-        },
-        {
-          "name": "广东音乐之声",
-          "sub": "FM99.3",
-          "url": "https://lhttp.qtfm.cn/live/1260/64k.mp3"
-        }
-      ]
+     "name": "经济之声",
+     "sub": "CNR · 财经",
+     "url": "https://lhttp.qingting.fm/live/4915/64k.mp3"
     },
     {
-      "id": "story",
-      "name": "评书 · 故事 · 曲艺",
-      "stations": [
-        {
-          "name": "安徽小说评书广播",
-          "sub": "评书",
-          "url": "https://lhttp.qtfm.cn/live/1951/64k.mp3"
-        },
-        {
-          "name": "沧州长书文艺广播",
-          "sub": "长篇评书",
-          "url": "https://lhttp.qingting.fm/live/5021902/64k.mp3"
-        },
-        {
-          "name": "济南故事广播",
-          "sub": "故事",
-          "url": "https://lhttp.qtfm.cn/live/1672/64k.mp3"
-        },
-        {
-          "name": "北京文艺广播",
-          "sub": "FM87.6",
-          "url": "https://lhttp.qtfm.cn/live/333/64k.mp3"
-        },
-        {
-          "name": "上海戏剧曲艺广播",
-          "sub": "戏曲曲艺",
-          "url": "https://lhttp.qingting.fm/live/269/64k.mp3"
-        },
-        {
-          "name": "江西故事广播",
-          "sub": "故事",
-          "url": "https://lhttp.qtfm.cn/live/20500092/64k.mp3"
-        }
-      ]
+     "name": "北京新闻",
+     "sub": "北京",
+     "url": "https://lhttp.qtfm.cn/live/339/64k.mp3"
     },
     {
-      "id": "noise",
-      "name": "白噪音 · 助眠",
-      "stations": [
-        {
-          "name": "棕噪音",
-          "sub": "助眠首选，低沉绵密",
-          "noise": "brown"
-        },
-        {
-          "name": "粉红噪音",
-          "sub": "柔和，接近雨落",
-          "noise": "pink"
-        },
-        {
-          "name": "雨声",
-          "sub": "窗外小雨",
-          "noise": "rain"
-        },
-        {
-          "name": "电扇声",
-          "sub": "夏夜风扇",
-          "noise": "fan"
-        }
-      ]
+     "name": "广东新闻",
+     "sub": "广东",
+     "url": "https://lhttp.qtfm.cn/live/1254/64k.mp3"
+    },
+    {
+     "name": "珠江经济",
+     "sub": "广东",
+     "url": "https://lhttp.qtfm.cn/live/1259/64k.mp3"
+    },
+    {
+     "name": "第一财经",
+     "sub": "上海 FM90.9",
+     "url": "https://lhttp-hw.qtfm.cn/live/276/64k.mp3"
+    },
+    {
+     "name": "股市广播",
+     "sub": "广东",
+     "url": "https://lhttp.qtfm.cn/live/4847/64k.mp3"
     }
-  ]
+   ]
+  },
+  {
+   "id": "music",
+   "name": "音乐",
+   "stations": [
+    {
+     "name": "经典947",
+     "sub": "上海 · 古典",
+     "url": "https://lhttp-hw.qtfm.cn/live/267/64k.mp3"
+    },
+    {
+     "name": "经典1037",
+     "sub": "上海 · 金曲",
+     "url": "https://lhttp-hw.qtfm.cn/live/273/64k.mp3"
+    },
+    {
+     "name": "古典乐",
+     "sub": "纯音乐",
+     "url": "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3"
+    },
+    {
+     "name": "北京音乐",
+     "sub": "北京",
+     "url": "https://lhttp.qtfm.cn/live/332/64k.mp3"
+    },
+    {
+     "name": "江苏经典",
+     "sub": "江苏",
+     "url": "https://lhttp.qtfm.cn/live/4938/64k.mp3"
+    },
+    {
+     "name": "广东音乐",
+     "sub": "广东",
+     "url": "https://lhttp.qtfm.cn/live/1260/64k.mp3"
+    },
+    {
+     "name": "动感101",
+     "sub": "上海 · 流行",
+     "url": "https://lhttp-hw.qtfm.cn/live/274/64k.mp3"
+    },
+    {
+     "name": "深圳音乐",
+     "sub": "深圳",
+     "url": "https://lhttp.qtfm.cn/live/1271/64k.mp3"
+    },
+    {
+     "name": "广州金曲",
+     "sub": "广州",
+     "url": "https://lhttp.qingting.fm/live/20192/64k.mp3"
+    },
+    {
+     "name": "南京音乐",
+     "sub": "南京",
+     "url": "https://lhttp-hw.qtfm.cn/live/4963/64k.mp3"
+    },
+    {
+     "name": "湖北经典",
+     "sub": "湖北",
+     "url": "https://lhttp.qtfm.cn/live/1296/64k.mp3"
+    },
+    {
+     "name": "辽宁经典",
+     "sub": "辽宁",
+     "url": "https://lhttp-hw.qtfm.cn/live/20021/64k.mp3"
+    },
+    {
+     "name": "郑州经典",
+     "sub": "郑州",
+     "url": "https://lhttp-hw.qtfm.cn/live/1223/64k.mp3"
+    },
+    {
+     "name": "陕西音乐",
+     "sub": "陕西",
+     "url": "https://lhttp.qtfm.cn/live/4873/64k.mp3"
+    },
+    {
+     "name": "无锡音乐",
+     "sub": "无锡",
+     "url": "https://lhttp.qingting.fm/live/2779/64k.mp3"
+    },
+    {
+     "name": "苏州都市",
+     "sub": "苏州",
+     "url": "https://lhttp.qingting.fm/live/2803/64k.mp3"
+    },
+    {
+     "name": "石家庄音乐",
+     "sub": "石家庄",
+     "url": "https://lhttp.qingting.fm/live/1654/64k.mp3"
+    },
+    {
+     "name": "沈阳经典",
+     "sub": "沈阳",
+     "url": "https://lhttp.qingting.fm/live/5022520/64k.mp3"
+    },
+    {
+     "name": "烟台经典",
+     "sub": "烟台",
+     "url": "https://lhttp.qingting.fm/live/20500097/64k.mp3"
+    },
+    {
+     "name": "内蒙古音乐",
+     "sub": "内蒙古",
+     "url": "https://lhttp-hw.qtfm.cn/live/1886/64k.mp3"
+    },
+    {
+     "name": "四川音乐",
+     "sub": "四川",
+     "url": "https://lhttp.qtfm.cn/live/1110/64k.mp3"
+    },
+    {
+     "name": "云南音乐",
+     "sub": "云南",
+     "url": "https://lhttp.qtfm.cn/live/1929/64k.mp3"
+    },
+    {
+     "name": "海南音乐",
+     "sub": "海南",
+     "url": "https://lhttp.qingting.fm/live/4878/64k.mp3"
+    },
+    {
+     "name": "贵州音乐",
+     "sub": "贵州",
+     "url": "https://lhttp.qtfm.cn/live/20067/64k.mp3"
+    }
+   ]
+  },
+  {
+   "id": "story",
+   "name": "评书·故事",
+   "stations": [
+    {
+     "name": "小说评书",
+     "sub": "安徽",
+     "url": "https://lhttp.qtfm.cn/live/1951/64k.mp3"
+    },
+    {
+     "name": "沧州长书",
+     "sub": "河北",
+     "url": "https://lhttp.qingting.fm/live/5021902/64k.mp3"
+    },
+    {
+     "name": "济南故事",
+     "sub": "山东",
+     "url": "https://lhttp.qtfm.cn/live/1672/64k.mp3"
+    },
+    {
+     "name": "北京文艺",
+     "sub": "北京",
+     "url": "https://lhttp.qtfm.cn/live/333/64k.mp3"
+    },
+    {
+     "name": "上海曲艺",
+     "sub": "上海",
+     "url": "https://lhttp.qingting.fm/live/269/64k.mp3"
+    },
+    {
+     "name": "江西故事",
+     "sub": "江西",
+     "url": "https://lhttp.qtfm.cn/live/20500092/64k.mp3"
+    },
+    {
+     "name": "合肥故事",
+     "sub": "安徽",
+     "url": "https://lhttp.qingting.fm/live/1961/64k.mp3"
+    },
+    {
+     "name": "山西故事",
+     "sub": "山西",
+     "url": "https://lhttp.qingting.fm/live/5022511/64k.mp3"
+    },
+    {
+     "name": "衡水评书",
+     "sub": "河北",
+     "url": "https://lhttp.qtfm.cn/live/5021940/64k.mp3"
+    },
+    {
+     "name": "山东文艺",
+     "sub": "山东",
+     "url": "https://lhttp.qtfm.cn/live/20238/64k.mp3"
+    },
+    {
+     "name": "芜湖故事",
+     "sub": "安徽",
+     "url": "https://lhttp.qtfm.cn/live/5028/64k.mp3"
+    }
+   ]
+  },
+  {
+   "id": "net",
+   "name": "网络台",
+   "stations": [
+    {
+     "name": "AsiaFM",
+     "sub": "亚洲经典",
+     "url": "https://lhttp.qingting.fm/live/5021912/64k.mp3"
+    },
+    {
+     "name": "动听音乐",
+     "sub": "网络",
+     "url": "https://lhttp-hw.qtfm.cn/live/5022107/64k.mp3"
+    },
+    {
+     "name": "云梦音乐",
+     "sub": "网络",
+     "url": "https://lhttp.qtfm.cn/live/20500187/64k.mp3"
+    },
+    {
+     "name": "星空电台",
+     "sub": "STAR RADIO",
+     "url": "https://lhttp-hw.qtfm.cn/live/5022379/64k.mp3"
+    },
+    {
+     "name": "BIG MIX",
+     "sub": "乐享音乐",
+     "url": "https://lhttp-hw.qtfm.cn/live/4913/64k.mp3"
+    },
+    {
+     "name": "华语之声",
+     "sub": "杭州",
+     "url": "https://lhttp.qtfm.cn/live/20505/64k.mp3"
+    }
+   ]
+  }
+ ]
 }

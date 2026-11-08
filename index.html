@@ -1,64 +1,42 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#08080a">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0b0d12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="睡前收音机">
 <title>睡前收音机</title>
 <link rel="manifest" href="./manifest.json">
-<link rel="icon" type="image/png" href="./favicon.png">
 <link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" href="./favicon.png">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-
-<div class="app">
-
-  <!-- 播放区 -->
-  <header class="deck">
-    <div class="brand">
-      <span class="dot" id="liveDot"></span>
-      <span id="statusText">未播放</span>
-    </div>
-
-    <div class="now">
-      <h1 id="nowName">睡前收音机</h1>
-      <p id="nowSub">选一个台，或者直接放白噪音</p>
-    </div>
-
-    <div class="controls">
-      <button class="btn-play" id="btnPlay" aria-label="播放">
-        <svg viewBox="0 0 24 24" id="icoPlay"><path d="M8 5v14l11-7z"/></svg>
-        <svg viewBox="0 0 24 24" id="icoPause" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
-      </button>
-
-      <div class="sleep-row">
-        <button class="chip" id="btnTimer">
-          <svg class="ti" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 11H7v-2h4V6h2z"/></svg>
-          <span id="timerLabel">睡眠定时</span>
-        </button>
-        <span class="fade-hint" id="fadeHint"></span>
-      </div>
-    </div>
-  </header>
-
-  <!-- 台列表 -->
-  <main class="list" id="list"></main>
-
-</div>
-
-<!-- 定时器弹层 -->
+<nav class="tabs" id="tabs"></nav>
+<main class="grid" id="grid"></main>
+<footer class="bar">
+  <button class="bp" id="btnPlay" aria-label="播放或暂停">
+    <svg viewBox="0 0 24 24" id="icoPlay"><path d="M8 5v14l11-7z"/></svg>
+    <svg viewBox="0 0 24 24" id="icoPause" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+  </button>
+  <div class="bm">
+    <div class="bn" id="nowName">睡前收音机</div>
+    <div class="bs" id="nowSub">点一个台开始</div>
+  </div>
+  <button class="bt" id="btnTimer" aria-label="睡眠定时">
+    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 11H7v-2h4V6h2z"/></svg>
+    <span id="timerLabel">定时</span>
+  </button>
+</footer>
 <div class="sheet" id="sheet" hidden>
-  <div class="sheet-inner">
-    <div class="sheet-title">多久后渐弱停止</div>
+  <div class="sheet-in">
+    <div class="sheet-t">睡眠定时</div>
     <div class="sheet-opts" id="sheetOpts"></div>
     <button class="sheet-cancel" id="sheetCancel">取消</button>
   </div>
 </div>
-
 <script src="./app.js"></script>
 </body>
 </html>

@@ -1,6 +1,5 @@
-/* 睡前收音机 · 单文件播放内核
+/* 睡前收音机 · 播放内核
  * 电台：mp3 直流，原生 <audio>，无 hls.js、无 CORS 依赖
- * 白噪音：Web Audio 本地合成，永不失效
  * 音量：不做应用内调节，一律走系统音量；这里只保留渐弱用的 fadeMul
  */
 (() => {
@@ -9,15 +8,10 @@
 const STORE_KEY    = 'sleepradio.v1';
 const FADE_SECONDS = 60;          // 最后 60 秒渐弱
 const RECONNECT_MS = 3000;
-const TIMER_OPTS   = [0, 15, 30, 45, 60, 90, 120];
-
-/* 白噪音的合成电平。电台直接满幅（由系统音量决定），
- * 白噪音是程序生成的宽频噪声，满幅会明显偏吵，所以压到 0.7。 */
-const NOISE_LEVEL  = 0.7;
+const TIMER_OPTS   = [15, 30, 45, 60, 90, 120];
 
 /* ---------------- 状态 ---------------- */
 let groups = [];
-let flat   = [];                  // [{sid, name, sub, url, noise, groupName}]
 let byId   = {};
 
 let currentId = null;
@@ -29,19 +23,19 @@ let reconnectTimer = null;
 let lastProgressAt = 0;
 let lastCurrentTime = 0;
 
-/* ---------------- 音频对象 ---------------- */
+let activeGroup = null;
+const scrollPos = {};
+
 let audio = null;
-let actx = null, noiseGain = null, noiseSrc = null, noiseChain = [], analyser = null;
 
 /* ---------------- DOM ---------------- */
 const $ = s => document.querySelector(s);
 const el = {
-  list: $('#list'), nowName: $('#nowName'), nowSub: $('#nowSub'),
-  statusText: $('#statusText'), liveDot: $('#liveDot'),
+  tabs: $('#tabs'), grid: $('#grid'),
+  nowName: $('#nowName'), nowSub: $('#nowSub'),
   btnPlay: $('#btnPlay'), icoPlay: $('#icoPlay'), icoPause: $('#icoPause'),
   btnTimer: $('#btnTimer'), timerLabel: $('#timerLabel'),
-  fadeHint: $('#fadeHint'), sheet: $('#sheet'), sheetOpts: $('#sheetOpts'),
-  sheetCancel: $('#sheetCancel'),
+  sheet: $('#sheet'), sheetOpts: $('#sheetOpts'), sheetCancel: $('#sheetCancel'),
 };
 
 /* ---------------- 存储 ---------------- */
@@ -51,45 +45,8 @@ function loadStore(){
 }
 function saveStore(){
   try{
-    localStorage.setItem(STORE_KEY, JSON.stringify({ currentId, sleepMin }));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ currentId, sleepMin, group: activeGroup }));
   }catch(e){}
-}
-
-/* ---------------- 格式化 ---------------- */
-function fmtLeft(sec){
-  sec = Math.max(0, Math.round(sec));
-  const m = Math.floor(sec / 60), s = sec % 60;
-  return m > 0 ? `${m}:${String(s).padStart(2,'0')}` : `${s}s`;
-}
-
-/* ==================================================================
-   渲染
-   ================================================================== */
-function buildList(){
-  el.list.innerHTML = '';
-  groups.forEach(g => {
-    const wrap = document.createElement('section');
-    wrap.className = 'grp';
-
-    const h = document.createElement('div');
-    h.className = 'grp-h';
-    h.textContent = g.name;
-    wrap.appendChild(h);
-
-    g.stations.forEach(st => {
-      const sid = g.id + '/' + st.name;
-      const b = document.createElement('button');
-      b.className = 'item';
-      b.dataset.sid = sid;
-      b.innerHTML =
-        `<span class="nm">${esc(st.name)}<span class="sb">${esc(st.sub || '')}</span></span>` +
-        `<span class="eq"><i></i><i></i><i></i></span>`;
-      b.addEventListener('click', () => onPick(sid));
-      wrap.appendChild(b);
-    });
-
-    el.list.appendChild(wrap);
-  });
 }
 
 function esc(s){
@@ -97,52 +54,143 @@ function esc(s){
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-function paintActive(){
-  document.querySelectorAll('.item').forEach(n => {
-    n.classList.toggle('active', n.dataset.sid === currentId && playing);
+function fmtLeft(sec){
+  sec = Math.max(0, Math.round(sec));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m > 0 ? `${m}:${String(s).padStart(2,'0')}` : `${s}s`;
+}
+
+/* ==================================================================
+   渲染：分组标签 + 宫格
+   ================================================================== */
+function buildTabs(){
+  el.tabs.innerHTML = '';
+  groups.forEach(g => {
+    const b = document.createElement('button');
+    b.className = 'tab';
+    b.dataset.gid = g.id;
+    b.textContent = g.name;
+    b.addEventListener('click', () => selectGroup(g.id));
+    el.tabs.appendChild(b);
   });
 }
 
-function paintDeck(){
+function selectGroup(gid, restore){
+  if(!groups.some(g => g.id === gid)) gid = groups[0] && groups[0].id;
+  if(gid === activeGroup) return;
+
+  if(activeGroup) scrollPos[activeGroup] = el.grid.scrollTop;
+  activeGroup = gid;
+
+  document.querySelectorAll('.tab').forEach(n =>
+    n.classList.toggle('on', n.dataset.gid === gid));
+
+  render();
+  el.grid.scrollTop = restore ? (scrollPos[gid] || 0) : 0;
+  saveStore();
+}
+
+function isWide(){ return window.innerWidth >= 900; }
+
+function cellEl(g, st){
+  const sid = g.id + '/' + st.name;
+  const b = document.createElement('button');
+  b.className = 'cell';
+  b.dataset.sid = sid;
+  b.innerHTML =
+    `<span class="cell-name">${esc(st.name)}</span>` +
+    `<span class="cell-sub">${esc(st.sub || '')}</span>` +
+    `<span class="cell-eq"><i></i><i></i><i></i></span>`;
+  b.addEventListener('click', () => onPick(sid));
+  return b;
+}
+
+/* 窄屏：一次只铺一个分组（tab 切换，零滚动）
+ * 宽屏：四组纵向平铺，一屏看全，不用来回切 */
+function render(){
+  el.grid.innerHTML = '';
+
+  if(isWide()){
+    groups.forEach(g => {
+      const sec = document.createElement('section');
+      sec.className = 'grp';
+
+      const h = document.createElement('h2');
+      h.className = 'grp-h';
+      h.innerHTML = `${esc(g.name)}<em>${g.stations.length}</em>`;
+      sec.appendChild(h);
+
+      const box = document.createElement('div');
+      box.className = 'cells';
+      g.stations.forEach(st => box.appendChild(cellEl(g, st)));
+      sec.appendChild(box);
+
+      el.grid.appendChild(sec);
+    });
+  }else{
+    const g = groups.find(x => x.id === activeGroup);
+    if(g) g.stations.forEach(st => el.grid.appendChild(cellEl(g, st)));
+  }
+
+  fitRows();
+  paintActive();
+}
+
+/* 窄屏：行高按可用高度均分，台少的组不至于在屏幕正中孤零零一条。
+ * 宽屏四组平铺，行高固定，不参与计算。 */
+function fitRows(){
+  if(isWide()){ el.grid.style.gridAutoRows = ''; return; }
+  const g = groups.find(x => x.id === activeGroup);
+  if(!g || !g.stations.length) return;
+
+  const cols = (getComputedStyle(el.grid).gridTemplateColumns || '').split(' ').filter(Boolean).length || 1;
+  const rows = Math.ceil(g.stations.length / cols);
+  const gap  = parseFloat(getComputedStyle(el.grid).rowGap) || 8;
+  const H    = el.grid.clientHeight - 18;      // 扣掉上下 padding
+  const h    = Math.floor((H - gap * (rows - 1)) / rows);
+
+  el.grid.style.gridAutoRows = Math.max(74, Math.min(136, h)) + 'px';
+}
+
+function paintActive(){
+  document.querySelectorAll('.cell').forEach(n =>
+    n.classList.toggle('active', n.dataset.sid === currentId && playing));
+
+  const st = currentId ? byId[currentId] : null;
+  document.querySelectorAll('.tab').forEach(n =>
+    n.classList.toggle('playing', !!st && playing && st.groupId === n.dataset.gid));
+}
+
+function paintBar(){
   const st = currentId ? byId[currentId] : null;
 
   if(!st){
     el.nowName.textContent = '睡前收音机';
     el.nowName.classList.add('idle');
-    el.nowSub.textContent  = '选一个台，或者直接放白噪音';
-    el.statusText.textContent = '未播放';
-    el.liveDot.classList.remove('on');
+    el.nowSub.textContent = '点一个台开始';
   }else{
     el.nowName.textContent = st.name;
     el.nowName.classList.remove('idle');
-    el.nowSub.textContent  = st.sub || st.groupName;
-    if(playing){
-      el.statusText.textContent = '正在播放';
-      el.liveDot.classList.add('on');
-    }else{
-      el.statusText.textContent = '已暂停';
-      el.liveDot.classList.remove('on');
-    }
+    el.nowSub.textContent = playing ? (st.sub || st.groupName) : '已暂停';
+    el.nowSub.classList.toggle('fading', false);
   }
 
   el.icoPlay.style.display  = playing ? 'none' : '';
   el.icoPause.style.display = playing ? '' : 'none';
-  el.btnPlay.classList.toggle('on', playing);
   paintActive();
   updateMediaSession();
 }
 
 /* ==================================================================
-   电平：只由渐弱系数决定，不做应用内音量
+   电平：只由渐弱系数决定
    ================================================================== */
 function applyVolume(){
   const v = Math.max(0, Math.min(1, fadeMul));
   if(audio) audio.volume = v;
-  if(noiseGain && actx) noiseGain.gain.setTargetAtTime(NOISE_LEVEL * v, actx.currentTime, 0.06);
 }
 
 /* ==================================================================
-   电台播放
+   播放
    ================================================================== */
 let isSwitching = false;
 
@@ -152,42 +200,51 @@ function ensureAudio(){
   audio.preload = 'none';
   audio.setAttribute('playsinline', '');
   audio.volume = 1;
+
   audio.addEventListener('playing', () => {
-    playing = true; lastProgressAt = Date.now(); lastCurrentTime = 0;
-    paintDeck();
+    playing = true;
+    lastProgressAt = Date.now();
+    lastCurrentTime = 0;
+    paintBar();
   });
+
   audio.addEventListener('pause', () => {
-    // pause 事件是异步派发的，切台 / 切白噪音时会晚到，不能无脑改状态
-    if(isSwitching || noiseSrc) return;
+    // pause 事件是异步派发的，切台时会上晚到，不能无脑改状态
+    if(isSwitching) return;
     playing = false;
-    paintDeck();
+    paintBar();
   });
+
   audio.addEventListener('error', () => {
     if(currentId && playing) scheduleReconnect();
   });
+
   audio.addEventListener('timeupdate', () => {
     if(audio.currentTime !== lastCurrentTime){
       lastCurrentTime = audio.currentTime;
       lastProgressAt = Date.now();
     }
   });
+
   return audio;
+}
+
+function srcOf(st){
+  return st.url + (st.url.includes('?') ? '&' : '?') + 'r=' + Date.now();
 }
 
 function playStation(st){
   const a = ensureAudio();
-  stopNoise();
 
   isSwitching = true;
   a.pause();
-  a.src = st.url + (st.url.includes('?') ? '&' : '?') + 'r=' + Date.now();
+  a.src = srcOf(st);
   a.load();
 
   const p = a.play();
   if(p && p.catch) p.catch(err => {
-    // 自动播放被拦或流暂时不可用
     playing = false;
-    paintDeck();
+    paintBar();
     if(err && err.name !== 'NotAllowedError') scheduleReconnect();
   });
 
@@ -201,7 +258,7 @@ function scheduleReconnect(){
     const st = currentId ? byId[currentId] : null;
     if(!st || !playing) return;
     const a = ensureAudio();
-    a.src = st.url + (st.url.includes('?') ? '&' : '?') + 'r=' + Date.now();
+    a.src = srcOf(st);
     a.load();
     const p = a.play();
     if(p && p.catch) p.catch(() => {});
@@ -211,8 +268,6 @@ function scheduleReconnect(){
 /* 看门狗：播放中但进度长时间不动 → 重连 */
 setInterval(() => {
   if(!playing || !audio || !currentId) return;
-  const st = byId[currentId];
-  if(!st || st.noise) return;
   if(Date.now() - lastProgressAt > 20000){
     lastProgressAt = Date.now();
     scheduleReconnect();
@@ -220,191 +275,40 @@ setInterval(() => {
 }, 5000);
 
 /* ==================================================================
-   白噪音合成
-   ================================================================== */
-function noiseBuffer(kind, seconds){
-  const sr = actx.sampleRate;
-  const len = Math.floor(sr * seconds);
-  const buf = actx.createBuffer(1, len, sr);
-  const d = buf.getChannelData(0);
-
-  if(kind === 'brown'){
-    let last = 0;
-    for(let i = 0; i < len; i++){
-      const w = Math.random() * 2 - 1;
-      last = (last + 0.02 * w) / 1.02;
-      d[i] = last * 3.2;
-    }
-  }else if(kind === 'pink'){
-    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
-    for(let i = 0; i < len; i++){
-      const w = Math.random() * 2 - 1;
-      b0 = 0.99886*b0 + w*0.0555179;
-      b1 = 0.99332*b1 + w*0.0750759;
-      b2 = 0.96900*b2 + w*0.1538520;
-      b3 = 0.86650*b3 + w*0.3104856;
-      b4 = 0.55000*b4 + w*0.5329522;
-      b5 = -0.7616*b5 - w*0.0168980;
-      d[i] = (b0+b1+b2+b3+b4+b5+b6 + w*0.5362) * 0.11;
-      b6 = w * 0.115926;
-    }
-  }else{
-    // rain / fan 都用白噪做基底，靠滤波器塑形
-    for(let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-  }
-
-  // 首尾交叉淡化，避免循环接缝的「咔哒」
-  const fade = Math.floor(sr * 0.05);
-  for(let i = 0; i < fade; i++){
-    const k = i / fade;
-    d[i] *= k;
-    d[len - 1 - i] *= k;
-  }
-  return buf;
-}
-
-function ensureCtx(){
-  if(actx) return;
-  const AC = window.AudioContext || window.webkitAudioContext;
-  actx = new AC();
-  noiseGain = actx.createGain();
-  noiseGain.gain.value = 0;
-  noiseGain.connect(actx.destination);
-
-  // 旁挂分析节点，用来验证「确实有信号输出」
-  analyser = actx.createAnalyser();
-  analyser.fftSize = 2048;
-  noiseGain.connect(analyser);
-}
-
-function playNoise(st){
-  ensureCtx();
-  if(actx.state === 'suspended') actx.resume();
-  stopNoise();
-  if(audio) audio.pause();
-
-  const kind = st.noise;
-  const src = actx.createBufferSource();
-  src.buffer = noiseBuffer(kind === 'rain' || kind === 'fan' ? 'white' : kind, 12);
-  src.loop = true;
-
-  const chain = [src];
-
-  if(kind === 'rain'){
-    const hp = actx.createBiquadFilter();
-    hp.type = 'highpass'; hp.frequency.value = 420; hp.Q.value = 0.7;
-    const lp = actx.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 0.5;
-    chain.push(hp, lp);
-  }else if(kind === 'fan'){
-    const lp = actx.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 850; lp.Q.value = 0.7;
-    chain.push(lp);
-  }else if(kind === 'brown'){
-    const lp = actx.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 5200;
-    chain.push(lp);
-  }else if(kind === 'pink'){
-    const hp = actx.createBiquadFilter();
-    hp.type = 'highpass'; hp.frequency.value = 90;
-    chain.push(hp);
-  }
-
-  // 雨势 / 风扇的缓慢起伏。
-  // 关键：LFO 必须接在独立的 mod 节点上，不能直接接 noiseGain.gain。
-  // 直连 gain 参数时，LFO 会一直叠加在音量上，暂停时把 gain 设成 0
-  // 仍然会被 LFO 顶起来 —— 这就是「白噪音打开后关不掉」的根因。
-  if(kind === 'rain' || kind === 'fan'){
-    const mod = actx.createGain();
-    mod.gain.value = 1;
-    const lfo = actx.createOscillator();
-    const lfoGain = actx.createGain();
-    lfo.frequency.value = kind === 'rain' ? 0.07 : 0.045;
-    lfoGain.gain.value = kind === 'rain' ? 0.08 : 0.045;
-    lfo.connect(lfoGain);
-    lfoGain.connect(mod.gain);
-    lfo.start();
-    chain.push(mod);
-    noiseChain.push(lfo, lfoGain);
-  }
-
-  for(let i = 0; i < chain.length - 1; i++) chain[i].connect(chain[i+1]);
-  chain[chain.length - 1].connect(noiseGain);
-
-  src.start();
-  noiseSrc = src;
-  noiseChain = noiseChain.concat(chain);
-
-  noiseGain.gain.cancelScheduledValues(actx.currentTime);
-  noiseGain.gain.setValueAtTime(0, actx.currentTime);
-  noiseGain.gain.setTargetAtTime(NOISE_LEVEL * Math.max(0.001, fadeMul), actx.currentTime, 0.25);
-
-  playing = true;
-  paintDeck();
-}
-
-function stopNoise(){
-  if(noiseSrc){
-    try{ noiseSrc.stop(); }catch(e){}
-    try{ noiseSrc.disconnect(); }catch(e){}
-    noiseSrc = null;
-  }
-  noiseChain.forEach(n => {
-    try{ if(typeof n.stop === 'function') n.stop(); }catch(e){}
-    try{ n.disconnect(); }catch(e){}
-  });
-  noiseChain = [];
-  if(noiseGain && actx){
-    // 清掉之前 setTargetAtTime 留下的自动化曲线，再落到 0
-    noiseGain.gain.cancelScheduledValues(actx.currentTime);
-    noiseGain.gain.setValueAtTime(0, actx.currentTime);
-  }
-}
-
-/* ==================================================================
-   统一控制
+   控制
    ================================================================== */
 function onPick(sid){
   const st = byId[sid];
   if(!st) return;
 
-  // 点当前正在播的项 → 暂停
+  // 点当前正在播的台 → 暂停
   if(sid === currentId && playing){ pause(); return; }
 
   currentId = sid;
   saveStore();
-
-  if(st.noise) playNoise(st);
-  else playStation(st);
-
-  paintDeck();
+  playStation(st);
+  paintBar();
 }
 
 function play(){
   const st = currentId ? byId[currentId] : null;
   if(!st){
-    // 没有选中，从第一个开始
-    if(flat.length) onPick(flat[0].sid);
+    const g = groups.find(x => x.id === activeGroup) || groups[0];
+    if(g && g.stations.length) onPick(g.id + '/' + g.stations[0].name);
     return;
   }
-  if(st.noise) playNoise(st);
-  else{
-    if(audio && audio.src){
-      const p = audio.play();
-      if(p && p.catch) p.catch(() => playStation(st));
-    }else{
-      playStation(st);
-    }
+  if(audio && audio.src){
+    const p = audio.play();
+    if(p && p.catch) p.catch(() => playStation(st));
+  }else{
+    playStation(st);
   }
 }
 
 function pause(){
   if(audio) audio.pause();
-  // 白噪音必须真停，不能只把 gain 降到 0：
-  // 滤波器 / LFO 还在跑，只降音量会关不干净，重播也会叠一层。
-  if(noiseSrc) stopNoise();
   playing = false;
-  paintDeck();
+  paintBar();
 }
 
 function toggle(){
@@ -419,25 +323,18 @@ function setTimer(min){
   if(!min){
     sleepAt = 0;
     fadeMul = 1;
-    applyVolume();
   }else{
     sleepAt = Date.now() + min * 60000;
     fadeMul = 1;
-    applyVolume();
   }
+  applyVolume();
   saveStore();
   paintTimer();
 }
 
 function paintTimer(){
   el.btnTimer.classList.toggle('on', !!sleepAt);
-  if(!sleepAt){
-    el.timerLabel.textContent = '睡眠定时';
-    el.fadeHint.textContent = '';
-    return;
-  }
-  const left = (sleepAt - Date.now()) / 1000;
-  el.timerLabel.textContent = fmtLeft(left);
+  el.timerLabel.textContent = sleepAt ? fmtLeft((sleepAt - Date.now()) / 1000) : '定时';
 }
 
 setInterval(() => {
@@ -452,10 +349,9 @@ setInterval(() => {
     sleepMin = 0;
     playing = false;
     if(audio) audio.pause();
-    stopNoise();
     saveStore();
     paintTimer();
-    paintDeck();
+    paintBar();
     return;
   }
 
@@ -463,19 +359,24 @@ setInterval(() => {
     // 前期降得慢、最后快速消失，听感更自然
     fadeMul = Math.pow(left / FADE_SECONDS, 0.6);
     applyVolume();
-    el.fadeHint.textContent = '渐弱中 · ' + Math.ceil(left) + 's';
-  }else{
-    el.fadeHint.textContent = '';
+    const st = currentId ? byId[currentId] : null;
+    if(st){
+      el.nowSub.textContent = '渐弱 · ' + Math.ceil(left) + 's';
+      el.nowSub.classList.add('fading');
+    }
+  }else if(currentId && playing){
+    const st = byId[currentId];
+    el.nowSub.textContent = st.sub || st.groupName;
+    el.nowSub.classList.remove('fading');
   }
 
   paintTimer();
 }, 1000);
 
-/* 定时器弹层 */
 function openSheet(){
   el.sheetOpts.innerHTML = '';
 
-  TIMER_OPTS.filter(m => m > 0).forEach(m => {
+  TIMER_OPTS.forEach(m => {
     const b = document.createElement('button');
     b.textContent = `${m} 分钟`;
     if(sleepAt && Math.abs((sleepAt - Date.now())/60000 - m) < 1) b.classList.add('sel');
@@ -532,16 +433,15 @@ async function boot(){
   }
 
   groups = data.groups || [];
-  flat = [];
+  byId = {};
   groups.forEach(g => {
     g.stations.forEach(st => {
-      const item = { ...st, sid: g.id + '/' + st.name, groupName: g.name };
-      flat.push(item);
+      const item = { ...st, sid: g.id + '/' + st.name, groupId: g.id, groupName: g.name };
       byId[item.sid] = item;
     });
   });
 
-  buildList();
+  buildTabs();
 
   // 恢复上次状态
   const s = loadStore();
@@ -551,14 +451,26 @@ async function boot(){
     sleepAt = Date.now() + sleepMin * 60000;
   }
 
+  // 默认落在正在播的台所在分组，否则第一个
+  const startGroup = (currentId && byId[currentId].groupId) || s.group || (groups[0] && groups[0].id);
+  activeGroup = null;
+  selectGroup(startGroup, true);
+
+  // 跨过 900px 断点时重排（手机 ⇄ 平板）
+  let wide = isWide();
+  let rt = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => {
+      if(isWide() !== wide){ wide = isWide(); render(); } else fitRows();
+    }, 180);
+  });
+
   applyVolume();
-  paintDeck();
+  paintBar();
   paintTimer();
-  if(sleepAt) paintTimer();
 
-  // 事件
   el.btnPlay.addEventListener('click', toggle);
-
   el.btnTimer.addEventListener('click', openSheet);
   el.sheetCancel.addEventListener('click', closeSheet);
   el.sheet.addEventListener('click', e => { if(e.target === el.sheet) closeSheet(); });
@@ -567,7 +479,6 @@ async function boot(){
     if(e.code === 'Space'){ e.preventDefault(); toggle(); }
   });
 
-  // 页面重新可见时校准（手机切后台可能暂停）
   document.addEventListener('visibilitychange', () => {
     if(!document.hidden && sleepAt) paintTimer();
   });
@@ -586,27 +497,19 @@ async function boot(){
 window.__dbg = () => ({
   playing,
   currentId,
+  activeGroup,
+  tabs: Array.from(document.querySelectorAll('.tab')).map(n => n.textContent),
+  cells: document.querySelectorAll('.cell').length,
+  wide: isWide(),
   hasAudio: !!audio,
   audioSrc: audio ? String(audio.src).slice(0, 90) : null,
   audioPaused: audio ? audio.paused : null,
   audioTime: audio ? Number(audio.currentTime.toFixed(2)) : null,
   audioReady: audio ? audio.readyState : null,
   audioVolume: audio ? Number(audio.volume.toFixed(2)) : null,
-  hasNoise: !!noiseSrc,
-  ctxState: actx ? actx.state : null,
-  gain: (noiseGain && actx) ? Number(noiseGain.gain.value.toFixed(4)) : null,
-  noiseLevel: NOISE_LEVEL,
   fadeMul: Number(fadeMul.toFixed(2)),
   sleepLeft: sleepAt ? Math.round((sleepAt - Date.now())/1000) : 0,
-  activeItems: document.querySelectorAll('.item.active').length,
-  rms: (() => {
-    if(!analyser) return null;
-    const buf = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(buf);
-    let sum = 0;
-    for(let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-    return Number(Math.sqrt(sum / buf.length).toFixed(5));
-  })(),
+  activeCells: document.querySelectorAll('.cell.active').length,
 });
 
 boot();
