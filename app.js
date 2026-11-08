@@ -566,10 +566,12 @@ async function boot(){
   });
 
   // PWA 外壳离线可用（不缓存音频流）
+  // 注意：boot() 是 async，走到这里时 load 可能已经触发过，
+  // 所以不能无条件 addEventListener('load')，要按 readyState 分支。
   if('serviceWorker' in navigator){
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
-    });
+    const reg = () => navigator.serviceWorker.register('./sw.js').catch(() => {});
+    if(document.readyState === 'complete') reg();
+    else window.addEventListener('load', reg);
   }
 }
 
