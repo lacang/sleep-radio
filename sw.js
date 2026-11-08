@@ -1,5 +1,5 @@
 /* 只缓存外壳，不缓存音频流 */
-const CACHE = 'sleepradio-v1';
+const CACHE = 'sleepradio-v2';
 const SHELL = [
   './',
   './index.html',
