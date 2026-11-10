@@ -33,6 +33,18 @@ python3 -m http.server 8811
 # 打开 http://127.0.0.1:8811/
 ```
 
+## 台单探活
+
+流地址会失效（蜻蜓会换 live ID）。本地随时可以体检：
+
+```bash
+python3 tools/check-streams.py          # 打印每个台的存活情况
+python3 tools/check-streams.py --strict # 有失效就退出码 1
+```
+
+GitHub Actions 每周一早上自动跑一次（`.github/workflows/streams.yml`），有失效就自动开 issue。
+想立刻跑：仓库 Actions 页 → 台单探活 → Run workflow。
+
 ## 发版注意
 
 改 `index.html` / `style.css` / `app.js` 之后必须把 `sw.js` 里的 `CACHE` 版本号加一，
