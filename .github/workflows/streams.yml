@@ -1,0 +1,43 @@
+name: 台单探活
+
+on:
+  schedule:
+    - cron: '0 1 * * 1'      # 每周一 09:00（北京时间）
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 探活
+        id: probe
+        run: |
+          set +e
+          python3 tools/check-streams.py --strict | tee /tmp/out.txt
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: 有失效就开 issue
+        if: steps.probe.outputs.code != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = '```\n' + fs.readFileSync('/tmp/out.txt', 'utf8') + '\n```\n\n去 `stations.json` 换掉或删掉这些台，然后 bump `sw.js` 的 CACHE。';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '台单探活：有失效的流',
+              body,
+              labels: ['streams']
+            });
