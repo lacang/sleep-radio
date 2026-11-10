@@ -20,11 +20,24 @@ tools/check-streams.py  台单探活
 
 ## 改台单
 
-只改 `stations.json`，每项 `{name, sub, url}`：
+只改 `stations.json`。它是**两层的分组结构**，不是平铺数组：
 
-- `name` 是宫格里的主标题，**控制在 5 个字内**，否则手机上会折行
-- `sub` 是灰色小字，写城市或类型
-- `url` 必须是 **mp3 直流**（`/64k.mp3` 这种）。m3u8 不要加，这个项目刻意不引 hls.js
+```json
+{
+  "groups": [
+    { "id": "news", "name": "新闻·财经",
+      "stations": [ { "name": "中国之声", "sub": "CNR · 新闻", "url": "https://.../64k.mp3" } ] },
+    { "id": "music", "name": "音乐", "stations": [ ... ] }
+  ]
+}
+```
+
+- `groups[].id` 是内部标识，`groups[].name` 是分组标签上显示的字（手机 tab / 平板小标题）
+- 每台三个字段：
+  - `name` 是宫格里的主标题，**控制在 5 个字内**，否则手机上会折行
+  - `sub` 是灰色小字，写城市或类型
+  - `url` 必须是 **mp3 直流**（`/64k.mp3` 这种）。m3u8 不要加，这个项目刻意不引 hls.js
+- 加新分组时，`app.js` 的 `groups` 数组和手机 tab 会跟着自动渲染，不用改 JS
 
 加完台跑一次探活确认能连上：
 
